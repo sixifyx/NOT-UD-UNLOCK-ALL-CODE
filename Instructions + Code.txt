@@ -1,0 +1,101 @@
+Hey, Create this as a c++ dll & Name it anything.
+Now copy & paste this code below into a cpp file.
+Then Make another file called pch.h.
+Then get unlock all offset (find it online or dump it)
+then compile.
+After that find a ud injector (search online or ask me)
+Send the dll to a user on discord to get its cdn link
+copy it
+then put it where u supposed to in the injector.
+Compile.
+Done You Made A MW2 Unlock All.
+
+
+#include "pch.h" // create this
+#include <cstdint>
+#include <winternl.h>
+#include <tchar.h>
+#include <algorithm>
+#include "xorstr.hpp" // xorstr  if you cannot find the file or not sure how to work it, cntrl f and search xorstr_ and delete all of them
+ 
+#pragma comment(lib, "user32.lib")
+#define DEBASE(a) ((size_t)a - (size_t)(unsigned long long)GetModuleHandleA(NULL))
+ 
+uintptr_t dwProcessBase;
+uint64_t backup = 0, Online_Loot__GetItemQuantity = 0, stackFix = 0;
+NTSTATUS(*NtContinue)(PCONTEXT threadContext, BOOLEAN raiseAlert) = nullptr;
+ 
+DWORD64 resolveRelativeAddress(DWORD64 instr, DWORD offset, DWORD instrSize) {
+    return instr == 0ui64 ? 0ui64 : (instr + instrSize + *(int*)(instr + offset));
+}
+ 
+bool compareByte(const char* pData, const char* bMask, const char* szMask) {
+    for (; *szMask; ++szMask, ++pData, ++bMask)
+        if (*szMask == 'x' && *pData != *bMask)
+            return false;
+    return (*szMask) == NULL;
+}
+ 
+DWORD64 findPattern(DWORD64 dwAddress, DWORD64 dwLen, const char* bMask, const char* szMask) {
+    DWORD length = (DWORD)strlen(szMask);
+    for (DWORD i = 0; i < dwLen - length; i++)
+        if (compareByte((const char*)(dwAddress + i), bMask, szMask))
+            return (DWORD64)(dwAddress + i);
+    return 0ui64;
+}
+ 
+LONG WINAPI TopLevelExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
+{
+    if (pExceptionInfo && pExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_ACCESS_VIOLATION)
+    {
+        if (pExceptionInfo->ContextRecord->R11 == 0xDEEDBEEF89898989)
+        {
+            pExceptionInfo->ContextRecord->R11 = backup;
+ 
+            if (pExceptionInfo->ContextRecord->Rip > Online_Loot__GetItemQuantity && pExceptionInfo->ContextRecord->Rip < (Online_Loot__GetItemQuantity + 0x1000))
+            {
+                pExceptionInfo->ContextRecord->Rip = stackFix;
+                pExceptionInfo->ContextRecord->Rax = 1;
+            }
+            NtContinue(pExceptionInfo->ContextRecord, 0);
+        }
+    }
+ 
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+ 
+void SetupExceptionHook()
+{
+    HMODULE ntdll = GetModuleHandleA(xorstr_("ntdll"));
+    NtContinue = (decltype(NtContinue))GetProcAddress(ntdll, xorstr_("NtContinue"));
+ 
+    void(*RtlAddVectoredExceptionHandler)(LONG First, PVECTORED_EXCEPTION_HANDLER Handler) = (decltype(RtlAddVectoredExceptionHandler))GetProcAddress(ntdll, xorstr_("RtlAddVectoredExceptionHandler"));
+    RtlAddVectoredExceptionHandler(0, TopLevelExceptionHandler);
+ 
+    uint64_t FindOnline_Loot__GetItemQuantity = findPattern(dwProcessBase + 0x1000000, 0xF000000, xorstr_("\x48\x8D\x0D\x00\x00\x00\x00\xE8\x00\x00\x00\x00\x8B\xC8\xC5\xF0\x57\xC9\xC4\xE1\xF3\x2A\xC9"), xorstr_("xxx????x????xxxxxxxxxxx"));
+ 
+    if (FindOnline_Loot__GetItemQuantity)
+    {
+        Online_Loot__GetItemQuantity = resolveRelativeAddress(FindOnline_Loot__GetItemQuantity + 7, 1, 5);
+ 
+        uint64_t FindDvar = findPattern(Online_Loot__GetItemQuantity, 0x1000, xorstr_("\x4C\x8B\x1D"), xorstr_("xxx"));
+        uint64_t FindStackFix = findPattern(Online_Loot__GetItemQuantity, 0x2000, xorstr_("\xE8\x00\x00\x00\x00\x00\x8B\x00\x00\x00\x00\x8B"), xorstr_("x?????x????x"));
+ 
+        if (FindStackFix)
+        {
+            stackFix = (FindStackFix + 5);
+ 
+            backup = *(uint64_t*)resolveRelativeAddress(FindDvar, 3, 7);
+            *(uint64_t*)resolveRelativeAddress(FindDvar, 3, 7) = 0xDEEDBEEF89898989;
+        }
+    }
+}
+ 
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
+{
+    if (ul_reason_for_call == DLL_PROCESS_ATTACH) {
+        dwProcessBase = (uintptr_t)(GetModuleHandle(0));
+        SetupExceptionHook();
+    }
+    return TRUE;
+}
